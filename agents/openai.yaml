@@ -1,0 +1,4 @@
+interface:
+  display_name: "HeyGen 数字人视频中文版"
+  short_description: "面向中文用户的数字人视频生成、透明合成与质量检查工作流"
+  default_prompt: "使用 $heygen-digital-human-video-zh 根据我的人物、背景、台词和音色素材制作专业数字人视频。"
