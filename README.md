@@ -37,18 +37,21 @@ git clone https://github.com/Chank0710/automated-digital-human-production.git "$
 使用 $heygen-digital-human-video-zh 帮我制作一条数字人视频。
 ```
 
-Skill 会先告诉用户需要提供哪些 API、权限和素材，确认方案后才开始生成。用户可以直接提供当前任务使用的 API Key，也可以选择本地配置。用户上传的音频会先在本地检测，并在需要时自动转换为 HeyGen 兼容的 PCM WAV。
+Skill 会使用固定换行的纯文本模板收集 API、权限、人物、背景、台词、音色、画幅、字幕和同步知识板等信息，不再询问发布平台。用户可以自然描述或上传素材，不需要保持模板格式。
+
+聊天中粘贴的 API Key 不会被当作已经自动进入运行环境。已有登录状态时可以使用 HeyGen 网页；否则用户运行 `scripts/configure_heygen_key.ps1`，通过隐藏输入把密钥配置到 Windows 用户环境。用户上传的音频会先在本地检测，并在需要时自动转换为 HeyGen 兼容的 PCM WAV。
 
 ## 目录说明
 
 - `SKILL.md`：完整中文工作流和必须遵守的规则
 - `scripts/check_video.py`：中文视频检查工具
+- `scripts/configure_heygen_key.ps1`：隐藏输入并配置 HeyGen API Key
 - `references/provider-adapter.md`：数字人服务商适配说明
 - `agents/openai.yaml`：Codex 中文界面元数据
 
 ## 安全要求
 
-不要提交 API Key、`.env` 文件、客户素材、克隆音色样本或生成视频。用户可以直接提供当前任务使用的 API Key，但不得回显、记录、保存、提交或放入交付物。需要长期复用时，可以使用环境变量或被忽略的 `.env` 文件。
+不要提交 API Key、`.env` 文件、客户素材、克隆音色样本或生成视频。不得把聊天中粘贴的密钥放进命令参数或日志。应使用已登录的 HeyGen 网页，或使用 PowerShell 配置脚本的隐藏输入。
 
 ## 开源协议
 
