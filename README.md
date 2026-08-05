@@ -1,4 +1,4 @@
-# HeyGen 数字人视频 Skill 中文版
+# 自动化数字人制作
 
 一套面向中文用户的 Codex 数字人视频制作 Skill，可自由更换人物、背景、台词、音色、版式和同步知识板。
 
@@ -28,7 +28,7 @@
 ## 安装
 
 ```powershell
-git clone https://github.com/Chank0710/heygen-digital-human-video-zh.git "$env:USERPROFILE\.codex\skills\heygen-digital-human-video-zh"
+git clone https://github.com/Chank0710/automated-digital-human-production.git "$env:USERPROFILE\.codex\skills\heygen-digital-human-video-zh"
 ```
 
 在 Codex 中调用：
