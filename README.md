@@ -1,29 +1,26 @@
 # 自动化数字人制作
 
-一套面向中文用户的 Codex 数字人视频制作 Skill，可自由更换人物、背景、台词、音色、版式和同步知识板。
+一套可中断恢复的 Codex 数字人视频工作流。支持替换人物、背景、台词、音色、版式、字幕和同步知识板。
 
-本项目固定使用 [`video-use`](https://github.com/browser-use/video-use) 完成剪辑与质量控制，数字人生成服务商可以使用 HeyGen，也可以替换为提供同等能力的其他 API。
+项目固定使用 [`video-use`](https://github.com/browser-use/video-use) 完成剪辑和画面质检。配置、UTF-8 API 请求、TTS 预检、状态恢复、防重复提交、音频标准化和可量化视频检查由确定性 Python 脚本执行，不再依靠模型记住长流程。
 
-英文版仓库：[heygen-digital-human-video](https://github.com/Chank0710/heygen-digital-human-video)
+## 可靠性结构
 
-## 解决的问题
-
-- 防止中文台词经过非 UTF-8 命令管道后变成问号
-- 防止把异常的一至十秒截断视频当作完整成片
-- 正确识别 VP9 WebM 的 `alpha_mode=1` 透明通道
-- 有原生透明通道时禁止再次进行黑底抠像
-- 改善头发、眼镜、手指、白大褂和运动边缘
-- 防止把非 WAV 音频未经本地检测和转换就上传到 HeyGen
-- 在制作前主动向用户收集 API、权限、人物、背景、台词、音色和交付规格
+- `config.json` 是用户资料和授权的唯一数据源。
+- `state.json` 原子记录步骤、请求指纹、TTS 时长、任务 ID、状态和输出地址。
+- `heygen_client.py` 统一读取密钥并发送 UTF-8 HTTP 请求。
+- `workflow.py` 是唯一支持的 API 工作流入口。
+- `check_tts.py` 自动拒绝问号、替换字符、异常中文语速以及长台词只生成 1-10 秒音频。
+- `check_video.py` 检查时长窗口、音轨、透明通道、宽度和高度。
 
 ## 环境要求
 
 - 支持安装 Skill 的 Codex
-- 已安装 `video-use`
-- FFmpeg 和 FFprobe 已加入 `PATH`
+- [`video-use`](https://github.com/browser-use/video-use)
 - Python 3.10 或更高版本
-- HeyGen 或其他数字人服务商账号与 API
-- 人物肖像、声音克隆和素材的合法授权
+- FFmpeg 和 FFprobe 已加入 `PATH`
+- HeyGen 或兼容服务商权限
+- 合法的肖像、声音和素材授权
 
 ## 安装
 
@@ -34,24 +31,34 @@ git clone https://github.com/Chank0710/automated-digital-human-production.git "$
 在 Codex 中调用：
 
 ```text
-使用 $heygen-digital-human-video-zh 帮我制作一条数字人视频。
+使用 $heygen-digital-human-video-zh 帮我制作数字人视频。
 ```
 
-Skill 会使用固定换行的纯文本模板收集 API、权限、人物、背景、台词、音色、画幅、字幕和同步知识板等信息，不再询问发布平台。用户可以自然描述或上传素材，不需要保持模板格式。
+## 工作流命令
 
-聊天中粘贴的 API Key 不会被当作已经自动进入运行环境。已有登录状态时可以使用 HeyGen 网页；否则用户运行 `scripts/configure_heygen_key.ps1`，通过隐藏输入把密钥配置到 Windows 用户环境。用户上传的音频会先在本地检测，并在需要时自动转换为 HeyGen 兼容的 PCM WAV。
+```powershell
+python scripts/workflow.py init 项目目录
+python scripts/workflow.py validate 项目目录
+python scripts/workflow.py auth 项目目录
+python scripts/workflow.py avatars 项目目录
+python scripts/workflow.py voices 项目目录
+python scripts/workflow.py prepare-audio 项目目录
+python scripts/workflow.py tts 项目目录
+python scripts/workflow.py create 项目目录
+python scripts/workflow.py poll 项目目录
+python scripts/workflow.py status 项目目录
+```
 
-## 目录说明
+运行 `scripts/configure_heygen_key.ps1`，通过隐藏输入配置 API Key。严禁把密钥写进项目 JSON 或 Git。
 
-- `SKILL.md`：完整中文工作流和必须遵守的规则
-- `scripts/check_video.py`：中文视频检查工具
-- `scripts/configure_heygen_key.ps1`：隐藏输入并配置 HeyGen API Key
-- `references/provider-adapter.md`：数字人服务商适配说明
-- `agents/openai.yaml`：Codex 中文界面元数据
+## 验证
 
-## 安全要求
+```powershell
+python scripts/selftest.py
+python scripts/check_video.py 成片 --require-audio --width 1920 --height 1080 --expected-duration 45
+```
 
-不要提交 API Key、`.env` 文件、客户素材、克隆音色样本或生成视频。不得把聊天中粘贴的密钥放进命令参数或日志。应使用已登录的 HeyGen 网页，或使用 PowerShell 配置脚本的隐藏输入。
+主观画面固定抽查首帧、25%、50%、75% 和尾帧。
 
 ## 开源协议
 

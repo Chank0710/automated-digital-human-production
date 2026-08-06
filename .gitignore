@@ -4,6 +4,9 @@ __pycache__/
 *.pyc
 edit/
 outputs/
+artifacts/
+config.json
+state.json
 *.mp4
 *.mov
 *.webm
