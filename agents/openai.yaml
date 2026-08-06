@@ -1,4 +1,4 @@
 interface:
   display_name: "自动化数字人制作"
   short_description: "自动完成数字人视频生成、透明合成、知识板和质量检查"
-  default_prompt: "使用 $heygen-digital-human-video-zh。先收集人物、背景、台词、时长、音色、画幅、字幕、知识板和授权，再初始化并校验结构化项目后开始生成。"
+  default_prompt: "使用 $heygen-digital-human-video-zh。先让我选择整个项目统一走 API 还是网页，再收集人物、背景、台词、时长、音色、画幅、字幕、知识板和授权。查询人物前锁定通道，禁止自动切换。"

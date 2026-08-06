@@ -18,6 +18,7 @@ SCHEMA_VERSION = 1
 CONFIG_TEMPLATE: dict[str, Any] = {
     "schema_version": SCHEMA_VERSION,
     "provider": "heygen",
+    "execution_channel": "",
     "api": {
         "base_url": "https://api.heygen.com",
         "endpoints": {
@@ -31,6 +32,7 @@ CONFIG_TEMPLATE: dict[str, Any] = {
     },
     "person": {
         "avatar_id": "",
+        "web_avatar_name": "",
         "asset_path": "",
     },
     "background": {
@@ -46,6 +48,7 @@ CONFIG_TEMPLATE: dict[str, Any] = {
     },
     "voice": {
         "voice_id": "",
+        "web_voice_name": "",
         "audio_path": "",
         "audio_url": "",
         "description": "",
@@ -65,6 +68,18 @@ CONFIG_TEMPLATE: dict[str, Any] = {
         "media_confirmed": False,
     },
 }
+
+
+def initial_state(execution_channel: str = "") -> dict[str, Any]:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "execution_channel": execution_channel,
+        "step": "channel_selected" if execution_channel else "initialized",
+        "updated_at": utc_now(),
+        "tts": {},
+        "video": {},
+        "checks": {},
+    }
 
 
 def utc_now() -> str:
@@ -112,17 +127,7 @@ def create_project(project_dir: Path, overwrite: bool = False) -> tuple[Path, Pa
     if config_path.exists() and not overwrite:
         raise ValueError(f"Config already exists: {config_path}")
     atomic_write_json(config_path, deepcopy(CONFIG_TEMPLATE))
-    atomic_write_json(
-        state_path,
-        {
-            "schema_version": SCHEMA_VERSION,
-            "step": "initialized",
-            "updated_at": utc_now(),
-            "tts": {},
-            "video": {},
-            "checks": {},
-        },
-    )
+    atomic_write_json(state_path, initial_state())
     return config_path, state_path
 
 
@@ -139,14 +144,7 @@ def load_config(project_dir: Path) -> dict[str, Any]:
 def load_state(project_dir: Path) -> dict[str, Any]:
     _, state_path = project_paths(project_dir)
     if not state_path.exists():
-        return {
-            "schema_version": SCHEMA_VERSION,
-            "step": "initialized",
-            "updated_at": utc_now(),
-            "tts": {},
-            "video": {},
-            "checks": {},
-        }
+        return initial_state()
     return read_json(state_path)
 
 
@@ -173,6 +171,7 @@ def validate_config(config: dict[str, Any], stage: str = "intake") -> dict[str, 
 
     required = [
         "provider",
+        "execution_channel",
         "script.text",
         "script.target_duration_seconds",
         "output.width",
@@ -187,8 +186,8 @@ def validate_config(config: dict[str, Any], stage: str = "intake") -> dict[str, 
         if value in (None, "", 0, False):
             missing.append(field)
 
-    if not any(get_path(config, field) for field in ("person.avatar_id", "person.asset_path")):
-        missing.append("person.avatar_id|person.asset_path")
+    if not any(get_path(config, field) for field in ("person.avatar_id", "person.web_avatar_name", "person.asset_path")):
+        missing.append("person.avatar_id|person.web_avatar_name|person.asset_path")
     if not (
         get_path(config, "background.asset_path")
         or get_path(config, "background.design_allowed")
@@ -196,13 +195,16 @@ def validate_config(config: dict[str, Any], stage: str = "intake") -> dict[str, 
         missing.append("background.asset_path|background.design_allowed")
     if not any(
         get_path(config, field)
-        for field in ("voice.voice_id", "voice.audio_path", "voice.audio_url", "voice.description")
+        for field in ("voice.voice_id", "voice.web_voice_name", "voice.audio_path", "voice.audio_url", "voice.description")
     ):
-        missing.append("voice.voice_id|voice.audio_path|voice.audio_url|voice.description")
+        missing.append("voice.voice_id|voice.web_voice_name|voice.audio_path|voice.audio_url|voice.description")
 
     width = get_path(config, "output.width")
     height = get_path(config, "output.height")
     duration = get_path(config, "script.target_duration_seconds")
+    channel = get_path(config, "execution_channel")
+    if channel and channel not in ("api", "web"):
+        errors.append("execution_channel must be 'api' or 'web'")
     if width and (not isinstance(width, int) or width <= 0):
         errors.append("output.width must be a positive integer")
     if height and (not isinstance(height, int) or height <= 0):
@@ -211,13 +213,14 @@ def validate_config(config: dict[str, Any], stage: str = "intake") -> dict[str, 
         errors.append("script.target_duration_seconds must be positive")
 
     if stage == "generate":
-        if not get_path(config, "person.avatar_id"):
-            missing.append("person.avatar_id")
-        if not (
-            get_path(config, "voice.voice_id")
-            or get_path(config, "voice.audio_url")
-        ):
-            missing.append("voice.voice_id|voice.audio_url")
+        if channel == "api":
+            if not get_path(config, "person.avatar_id"):
+                missing.append("person.avatar_id")
+            if not (get_path(config, "voice.voice_id") or get_path(config, "voice.audio_url")):
+                missing.append("voice.voice_id|voice.audio_url")
+        elif channel == "web":
+            if not (get_path(config, "person.web_avatar_name") or get_path(config, "person.asset_path")):
+                missing.append("person.web_avatar_name|person.asset_path")
 
     return {"missing": sorted(set(missing)), "errors": sorted(set(errors))}
 

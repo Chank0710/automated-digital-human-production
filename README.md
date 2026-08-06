@@ -7,7 +7,7 @@
 ## 可靠性结构
 
 - `config.json` 是用户资料和授权的唯一数据源。
-- `state.json` 原子记录步骤、请求指纹、TTS 时长、任务 ID、状态和输出地址。
+- `state.json` 原子记录锁定的 API/网页通道、步骤、请求指纹、TTS 时长、任务 ID、状态和输出地址。
 - `heygen_client.py` 统一读取密钥并发送 UTF-8 HTTP 请求。
 - `workflow.py` 是唯一支持的 API 工作流入口。
 - `check_tts.py` 自动拒绝问号、替换字符、异常中文语速以及长台词只生成 1-10 秒音频。
@@ -38,6 +38,7 @@ git clone https://github.com/Chank0710/automated-digital-human-production.git "$
 
 ```powershell
 python scripts/workflow.py init 项目目录
+python scripts/workflow.py channel 项目目录 api
 python scripts/workflow.py validate 项目目录
 python scripts/workflow.py auth 项目目录
 python scripts/workflow.py avatars 项目目录
@@ -46,8 +47,11 @@ python scripts/workflow.py prepare-audio 项目目录
 python scripts/workflow.py tts 项目目录
 python scripts/workflow.py create 项目目录
 python scripts/workflow.py poll 项目目录
+python scripts/workflow.py record-web 项目目录 --job-id 任务ID --status submitted
 python scripts/workflow.py status 项目目录
 ```
+
+查询人物前必须选择 `api` 或 `web`，且整个项目只使用这一通道。网页模式会拒绝 API 命令。开始工作后确需切换时，必须先获得用户确认并运行 `channel ... --confirm-switch`；工作流会先归档旧状态，再清空原通道进度。
 
 运行 `scripts/configure_heygen_key.ps1`，通过隐藏输入配置 API Key。严禁把密钥写进项目 JSON 或 Git。
 

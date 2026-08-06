@@ -15,6 +15,8 @@
 
 `scripts/heygen_client.py` 统一负责认证头、UTF-8 JSON、安全的 GET 重试、超时、轮询和密钥读取。`scripts/workflow.py` 统一负责请求指纹、状态检查点、防重复提交和响应存档。禁止用临时请求替换这些入口。
 
+查询资源前必须把项目锁定为 `api` 或 `web`。两个入口可见的人物库和音色库可能不同，网页能看到某个人物，不代表 API 一定能取得其 ID。资源缺失时必须停下来让用户决定。切换通道必须运行 `channel ... --confirm-switch` 并归档旧状态，禁止把网页任务接在 API 状态后继续执行，反之亦然。
+
 1. `GET /v3/users/me` 检查身份。
 2. `GET /v3/avatars/looks` 查询人物 Look ID。分页时，把响应中的 `next_token` 作为下一次请求的 `token` 参数。
 3. `GET /v3/voices/{voice_id}` 或音色列表接口确认音色。

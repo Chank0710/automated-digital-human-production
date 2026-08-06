@@ -11,6 +11,7 @@ description: 制作可替换人物、背景、台词、音色、版式和同步�
 
 ```text
 服务商/API：
+执行通道（API 或网页）：
 人物：
 背景：
 台词：
@@ -36,20 +37,22 @@ description: 制作可替换人物、背景、台词、音色、版式和同步�
 python scripts/workflow.py init 项目目录
 ```
 
-3. 把确认后的资料写入 `项目目录/config.json`。严禁把 API Key 写入配置。持续校验直到没有缺失字段：
+3. 查询人物或音色前，必须让用户为整个项目选择唯一执行通道。先机械绑定通道，再把资料写入 `项目目录/config.json` 并校验。严禁把 API Key 写入配置。
 
 ```powershell
+python scripts/workflow.py channel 项目目录 api
+# 或：python scripts/workflow.py channel 项目目录 web
 python scripts/workflow.py validate 项目目录
 ```
 
-4. 有 HeyGen 登录页面时可以使用网页。需要 API 时，让用户运行 `scripts/configure_heygen_key.ps1`；粘贴在聊天中的密钥不会自动进入运行环境。
+4. 禁止混用通道。`api` 模式只走 API，并让用户运行 `scripts/configure_heygen_key.ps1`；聊天中的密钥不会自动进入运行环境。`web` 模式只使用已登录网页，并用 `record-web` 登记网页任务状态。
 5. `voice.audio_path` 有值时，上传前必须自动检测并转换音频：
 
 ```powershell
 python scripts/workflow.py prepare-audio 项目目录
 ```
 
-6. 只通过统一入口检查身份并查询人物、音色：
+6. API 模式只通过统一入口检查身份并查询人物、音色。如果 API 返回结果中没有用户指定的人物或音色，立即停止，让用户选择 API 可见资源，或明确同意迁移到网页。禁止自动切换。
 
 ```powershell
 python scripts/workflow.py auth 项目目录
@@ -65,6 +68,13 @@ python scripts/workflow.py create 项目目录
 python scripts/workflow.py poll 项目目录
 ```
 
+网页模式必须立即登记 HeyGen 页面中的任务：
+
+```powershell
+python scripts/workflow.py record-web 项目目录 --job-id 任务ID --status submitted
+python scripts/workflow.py record-web 项目目录 --status completed --output-url 输出地址
+```
+
 8. 下载完成的透明人物视频，再使用 `video-use` 合成与剪辑。
 9. 使用项目确认值执行机械质检：
 
@@ -75,7 +85,8 @@ python scripts/check_video.py 成片 --require-audio --width 宽度 --height 高
 ## 状态与恢复
 
 - `config.json` 是台词、人物、背景、音色、版式和授权的唯一数据源。
-- `state.json` 是步骤、请求指纹、TTS 时长、任务 ID、任务状态和输出地址的唯一数据源。
+- `state.json` 是锁定执行通道、步骤、请求指纹、TTS 时长、任务 ID、任务状态和输出地址的唯一数据源。
+- 禁止直接编辑 JSON 切换 `execution_channel`。确需切换时，先取得用户明确确认，再运行 `python scripts/workflow.py channel 项目目录 api|web --confirm-switch`；程序会归档旧状态并清空旧通道进度。
 - 中断后先运行 `python scripts/workflow.py status 项目目录`。相同请求指纹已有任务 ID 时禁止重新创建视频。
 - 工作流采用原子方式写 JSON。除非处理明确的服务商兼容问题，不得手工修改 `state.json`。
 - 服务商响应保存到 `项目目录/artifacts/`，密钥永不写入文件。

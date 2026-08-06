@@ -9,7 +9,7 @@ from typing import Any
 from check_tts import evaluate, metadata_duration, metadata_text
 from heygen_client import HeyGenClient, HeyGenError, find_first
 from prepare_audio import prepare
-from project_io import atomic_write_json, create_project, load_config, load_state, project_paths, request_fingerprint, save_state, validate_config
+from project_io import atomic_write_json, create_project, initial_state, load_config, load_state, project_paths, request_fingerprint, save_state, utc_now, validate_config
 
 
 def client_from_config(config: dict[str, Any]) -> HeyGenClient:
@@ -22,6 +22,29 @@ def fail_if_invalid(config: dict[str, Any], stage: str) -> None:
     if result["missing"] or result["errors"]:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         raise SystemExit(2)
+
+
+def require_channel(project: Path, config: dict[str, Any], expected: str | None = None) -> dict[str, Any]:
+    channel = config.get("execution_channel")
+    if channel not in ("api", "web"):
+        raise RuntimeError("Select one execution channel first: workflow.py channel PROJECT_DIR api|web")
+    if expected and channel != expected:
+        raise RuntimeError(
+            f"Project is locked to the {channel!r} channel; {expected!r} operation refused. "
+            "Use the selected channel or explicitly run channel with --confirm-switch."
+        )
+    state = load_state(project)
+    state_channel = state.get("execution_channel")
+    if state_channel and state_channel != channel:
+        raise RuntimeError(
+            f"Channel mismatch: config={channel!r}, state={state_channel!r}. "
+            "Do not edit the channel manually; run workflow.py channel with --confirm-switch."
+        )
+    if not state_channel:
+        state["execution_channel"] = channel
+        state["step"] = "channel_selected"
+        save_state(project, state)
+    return state
 
 
 def store_response(project: Path, name: str, response: dict[str, Any]) -> Path:
@@ -56,8 +79,39 @@ def command_validate(args: argparse.Namespace) -> None:
         raise SystemExit(2)
 
 
+def command_channel(args: argparse.Namespace) -> None:
+    config = load_config(args.project)
+    state = load_state(args.project)
+    current = state.get("execution_channel") or config.get("execution_channel") or ""
+    if current == args.channel:
+        config["execution_channel"] = args.channel
+        config_path, _ = project_paths(args.project)
+        atomic_write_json(config_path, config)
+        state["execution_channel"] = args.channel
+        save_state(args.project, state)
+        print(json.dumps({"execution_channel": args.channel, "changed": False}, indent=2))
+        return
+    if current and not args.confirm_switch:
+        raise RuntimeError(
+            f"Project is already locked to {current!r}. Switching to {args.channel!r} requires --confirm-switch."
+        )
+    archived = None
+    if current:
+        stamp = utc_now().replace(":", "-")
+        archived = args.project / "artifacts" / f"state-before-{current}-to-{args.channel}-{stamp}.json"
+        atomic_write_json(archived, state)
+    config["execution_channel"] = args.channel
+    config_path, _ = project_paths(args.project)
+    atomic_write_json(config_path, config)
+    state = initial_state(args.channel)
+    state["channel_switch"] = {"from": current or None, "to": args.channel, "archived_state": str(archived) if archived else None}
+    save_state(args.project, state)
+    print(json.dumps({"execution_channel": args.channel, "changed": True, "archived_state": str(archived) if archived else None}, indent=2))
+
+
 def command_auth(args: argparse.Namespace) -> None:
     config = load_config(args.project)
+    require_channel(args.project, config, "api")
     response = client_from_config(config).me()
     store_response(args.project, "auth_response.json", response)
     state = load_state(args.project)
@@ -69,12 +123,14 @@ def command_auth(args: argparse.Namespace) -> None:
 
 def command_avatars(args: argparse.Namespace) -> None:
     config = load_config(args.project)
+    require_channel(args.project, config, "api")
     path = store_response(args.project, "avatars_response.json", client_from_config(config).list_avatars(args.token))
     print(json.dumps({"saved": str(path)}, indent=2))
 
 
 def command_voices(args: argparse.Namespace) -> None:
     config = load_config(args.project)
+    require_channel(args.project, config, "api")
     path = store_response(args.project, "voices_response.json", client_from_config(config).list_voices(args.voice_id))
     print(json.dumps({"saved": str(path)}, indent=2))
 
@@ -101,6 +157,7 @@ def command_prepare_audio(args: argparse.Namespace) -> None:
 
 def command_tts(args: argparse.Namespace) -> None:
     config = load_config(args.project)
+    require_channel(args.project, config, "api")
     fail_if_invalid(config, "generate")
     if not config["voice"].get("voice_id"):
         raise RuntimeError("voice.voice_id is required for provider TTS")
@@ -132,6 +189,7 @@ def command_tts(args: argparse.Namespace) -> None:
 
 def command_create(args: argparse.Namespace) -> None:
     config = load_config(args.project)
+    require_channel(args.project, config, "api")
     fail_if_invalid(config, "generate")
     state = load_state(args.project)
     audio_url = config["voice"].get("audio_url") or (state.get("tts") or {}).get("audio_url")
@@ -156,7 +214,7 @@ def command_create(args: argparse.Namespace) -> None:
 
 def command_poll(args: argparse.Namespace) -> None:
     config = load_config(args.project)
-    state = load_state(args.project)
+    state = require_channel(args.project, config, "api")
     job_id = (state.get("video") or {}).get("job_id")
     if not job_id:
         raise RuntimeError("state.json has no video job ID")
@@ -180,6 +238,24 @@ def command_poll(args: argparse.Namespace) -> None:
     print(json.dumps(state["video"], ensure_ascii=False, indent=2))
 
 
+def command_record_web(args: argparse.Namespace) -> None:
+    config = load_config(args.project)
+    state = require_channel(args.project, config, "web")
+    fail_if_invalid(config, "generate")
+    video = state.setdefault("video", {})
+    if args.job_id:
+        video["job_id"] = args.job_id
+    if args.status:
+        video["status"] = args.status
+    if args.output_url:
+        video["output_url"] = args.output_url
+    if not any((args.job_id, args.status, args.output_url)):
+        raise RuntimeError("record-web requires --job-id, --status, or --output-url")
+    state["step"] = "video_completed" if args.output_url or args.status == "completed" else "web_job_recorded"
+    save_state(args.project, state)
+    print(json.dumps(video, ensure_ascii=False, indent=2))
+
+
 def command_status(args: argparse.Namespace) -> None:
     print(json.dumps(load_state(args.project), ensure_ascii=False, indent=2))
 
@@ -189,6 +265,7 @@ def build_parser() -> argparse.ArgumentParser:
     subs = parser.add_subparsers(dest="command", required=True)
     init = subs.add_parser("init"); init.add_argument("project", type=Path); init.add_argument("--overwrite", action="store_true"); init.set_defaults(handler=command_init)
     validate = subs.add_parser("validate"); validate.add_argument("project", type=Path); validate.add_argument("--stage", choices=("intake", "generate"), default="intake"); validate.set_defaults(handler=command_validate)
+    channel = subs.add_parser("channel"); channel.add_argument("project", type=Path); channel.add_argument("channel", choices=("api", "web")); channel.add_argument("--confirm-switch", action="store_true"); channel.set_defaults(handler=command_channel)
     auth = subs.add_parser("auth"); auth.add_argument("project", type=Path); auth.set_defaults(handler=command_auth)
     avatars = subs.add_parser("avatars"); avatars.add_argument("project", type=Path); avatars.add_argument("--token"); avatars.set_defaults(handler=command_avatars)
     voices = subs.add_parser("voices"); voices.add_argument("project", type=Path); voices.add_argument("--voice-id"); voices.set_defaults(handler=command_voices)
@@ -196,6 +273,7 @@ def build_parser() -> argparse.ArgumentParser:
     tts = subs.add_parser("tts"); tts.add_argument("project", type=Path); tts.set_defaults(handler=command_tts)
     create = subs.add_parser("create"); create.add_argument("project", type=Path); create.set_defaults(handler=command_create)
     poll = subs.add_parser("poll"); poll.add_argument("project", type=Path); poll.add_argument("--interval", type=float, default=5); poll.add_argument("--timeout", type=float, default=1800); poll.set_defaults(handler=command_poll)
+    record_web = subs.add_parser("record-web"); record_web.add_argument("project", type=Path); record_web.add_argument("--job-id"); record_web.add_argument("--status"); record_web.add_argument("--output-url"); record_web.set_defaults(handler=command_record_web)
     status = subs.add_parser("status"); status.add_argument("project", type=Path); status.set_defaults(handler=command_status)
     return parser
 
