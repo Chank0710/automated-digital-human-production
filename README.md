@@ -4,7 +4,7 @@
 
 项目固定使用 [`video-use`](https://github.com/browser-use/video-use) 完成剪辑和画面质检。配置、UTF-8 API 请求、TTS 预检、状态恢复、防重复提交、音频标准化和可量化视频检查由确定性 Python 脚本执行，不再依靠模型记住长流程。
 
-## 项目亮点
+## 生产增益
 
 - 断点续跑
   
